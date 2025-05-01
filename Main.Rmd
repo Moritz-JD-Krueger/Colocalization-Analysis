@@ -1,5 +1,5 @@
 ---
-title: "Colocalization Analysis"
+title: "Colocalization Analysis Main"
 author: "Moritz Krueger"
 output: html_document
 ---
