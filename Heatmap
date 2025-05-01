@@ -1,0 +1,112 @@
+
+# Heatmap of HFRS_with_dememtia and HFRS_wo_dementia
+```{r}
+HFRS_with <- fread("HFRS_with_dementia_coloc_results.csv") # Path of HFRS with dementia defintion
+HFRS_wo <- fread("HFRS_wo_dementia_coloc_results.csv") # Path of HFRS without dementia definition
+
+
+# Filter HFRS_with
+HFRS_with_filtered <- HFRS_with[!is.na(candidate_gene) & PP.H4 > 0.8]
+
+# Filter HFRS_wo
+HFRS_wo_filtered <- HFRS_wo[!is.na(candidate_gene) & PP.H4 > 0.8] 
+
+# Create HFRS_common
+HFRS_common <- merge(HFRS_with_filtered[, .(candidate_gene, sample,candidate_snp , QTL)], HFRS_wo_filtered[, .(candidate_gene, sample,candidate_snp , QTL)], 
+                     by = c("candidate_gene", "sample"), 
+                     suffixes = c("_with", "_wo"))
+```
+
+#  Define function for heatmap
+```{r}
+
+create_heatmap <- function(data, title, width = 10, height = 5) {
+  # Pre-process data to identify overlapping data points
+  data <- data %>%
+    group_by(candidate_gene, sample) %>%
+    mutate(overlap = n() > 1,
+           QTL = ifelse(overlap, "eQTL & sQTL", as.character(QTL))) %>%
+    ungroup()
+
+  # Get unique values and their counts
+  unique_genes <- unique(data$candidate_gene)
+  unique_samples <- unique(data$sample)
+  n_genes <- length(unique_genes)
+  n_samples <- length(unique_samples)
+
+  plot <- ggplot(data, aes(x = candidate_gene, y = sample, fill = QTL)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = ifelse(in_HFRS_common, "*", "")), 
+              color = "black", size = 6, vjust = 0.75) +
+    scale_fill_manual(values = c("eQTL" = "#40e0d0",
+                                 "sQTL" = "#ff9999",
+                                 "eQTL & sQTL" = "#cc99ff"),
+                      name = "QTL Type",
+                      breaks = c("eQTL", "sQTL", "eQTL & sQTL")) +
+    scale_x_discrete(limits = sort(unique_genes), expand = c(0, 0)) +
+    scale_y_discrete(limits = rev(sort(unique_samples)), expand = c(0, 0)) +
+    geom_hline(yintercept = seq(0.5, n_samples + 0.5, 1), 
+               color = "white", size = 0.5) +
+    geom_vline(xintercept = seq(0.5, n_genes + 0.5, 1), 
+               color = "white", size = 0.5) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, face = "italic", size = 9.25),
+          axis.text.y = element_text(size = 9.9),
+          axis.title.x = element_text(size = 14, face = "bold"),
+          panel.grid = element_blank(),
+          panel.background = element_rect(fill = "#f3f3f4", color = NA),
+          panel.border = element_rect(color = "black", fill = NA, size = 0.5),
+          plot.background = element_rect(fill = "white", color = NA),
+          legend.position = "bottom",
+          axis.title.y = element_blank(),
+          plot.margin = margin(t = 20, r = 20, b = 20, l = 20, unit = "pt"),
+          plot.caption = element_text(hjust = 0.5, size = 10),
+          plot.title = element_text(hjust = 0.5, size = 17, face = "bold")) +
+    labs(title = paste0(title, " (PP.H4 > 0.8)"),
+         x = "Candidate Gene",
+         caption = "* Indicates presence in both HFRS GWAS") +
+    guides(fill = guide_legend(title = "QTL Type"),
+           text = guide_legend(title = "Both GWAS", 
+                               override.aes = list(fill = NA, label = "*")))
+  
+  # Return the plot with specified dimensions
+  return(plot + theme(aspect.ratio = height / width))
+}
+
+
+
+# Process and plot results
+HFRS_with_filtered_pl <- HFRS_with_filtered %>%
+  mutate(QTL = case_when(
+    QTL == "GTEx_Analysis_v8_eQTL" ~ "eQTL",
+    QTL == "GTEx_Analysis_v8_sQTL" ~ "sQTL",
+    TRUE ~ NA_character_  # Set to NA for any other values
+  )) %>%
+  mutate(in_HFRS_common = interaction(candidate_gene, sample) %in% 
+           interaction(HFRS_common$candidate_gene, HFRS_common$sample))
+
+plot_with_filtered <- create_heatmap(HFRS_with_filtered_pl, "HFRS with Dementia", width = 28, height = 36)
+
+# Process and plot HFRS_wo_filtered
+HFRS_wo_filtered_pl <- HFRS_wo_filtered %>%
+  mutate(QTL = case_when(
+    QTL == "GTEx_Analysis_v8_eQTL" ~ "eQTL",
+    QTL == "GTEx_Analysis_v8_sQTL" ~ "sQTL",
+    TRUE ~ NA_character_  # Set to NA for any other values
+  )) %>%
+  mutate(in_HFRS_common = interaction(candidate_gene, sample) %in% 
+           interaction(HFRS_common$candidate_gene, HFRS_common$sample))
+
+plot_wo_filtered <- create_heatmap(HFRS_wo_filtered_pl, "HFRS without Dementia", width = 43, height = 40)
+
+# Save plots 
+ggsave("HFRS_with_filtered_heatmap.jpg", plot_with_filtered, 
+       width = 12, height = 10, dpi = 300)
+ggsave("HFRS_wo_filtered_heatmap.jpg", plot_wo_filtered, 
+       width = 12, height = 10, dpi = 300)
+
+# Display plots
+print(plot_with_filtered)
+print(plot_wo_filtered)
+
+```
