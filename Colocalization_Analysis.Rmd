@@ -23,8 +23,10 @@ GWAS_path <- "Data/GWAS/HFRS_wo.csv"   # Choose path of GWAS that should be anal
 GWAS_name <- "HFRS_wo_dementia"   # Specify name of GWAS
 QTL_path <- "Data/QTL/"  # Specify path of QTL. Colocalization will be performed for all QTLs/tissues in that folder
 GWAS_pval <- 0.0000010  # Specify pval by which data is filtered by
+```
 
-
+## Process and define column names 
+```{r columns, echo=FALSE}
 p_names <- c("pval", "P", "pvalue", "qval", "P-value", "p", "P-Value", "p.value", "P-Val", "P.Value", "p.val", "P.Val") # Possible names for p-value
 rsid_names <- c("snp", "rsid", "SNP", "RSID", "snps","rs_id_dbSNP151_GRCh38p7") # Possible names for rsid
 beta_names <- c("beta", "BETA", "slope", "Beta") # Possible names for beta
@@ -37,7 +39,7 @@ gene_names <- c("gene_symbol", "gene_name", "gene_most_severe") # Possible names
 
 
 
-## Load GWAS Data and clean it up
+# Load GWAS Data
 ```{r load_GWAS, echo=FALSE}
 GWAS_raw <- fread(GWAS_path)
 ```
