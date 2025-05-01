@@ -23,7 +23,7 @@ HFRS_common <- merge(HFRS_with_filtered[, .(candidate_gene, sample,candidate_snp
                      suffixes = c("_with", "_wo"))
 ```
 
-##  Define function for heatmap
+##  Heatmap function
 ```{r heatmap_function, echo=FALSE}
 
 create_heatmap <- function(data, title, width = 10, height = 5) {
