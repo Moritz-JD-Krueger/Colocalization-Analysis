@@ -1,0 +1,643 @@
+---
+title: "Colocalization Analysis"
+author: "Moritz Krueger"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Libraries
+```{r libraries, echo=FALSE}
+library(tidyverse)
+library(data.table)
+library(hyprcoloc)
+library(coloc)
+library(tools)
+library(eQTpLot)
+
+library(locuscomparer)
+library(locuszoomr)
+library(ggplot2)
+library(patchwork)
+```
+
+## Define paths
+
+```{r paths, echo=FALSE}
+#GWAS_path <- "Data/GWAS/HFRS_with.txt"   # Choose path of GWAS that should be analyzed
+GWAS_path <- "Data/GWAS/HFRS_wo.csv"   # Choose path of GWAS that should be analyzed
+GWAS_name <- "HFRS_wo_dementia"   # Specify name of GWAS
+QTL_path <- "Data/QTL/"  # Specify path of QTL. Colocalization will be performed for all QTLs in that folder
+GWAS_pval <- 0.0000010  # Specify pval by which data is filtered by
+
+
+p_names <- c("pval", "P", "pvalue", "qval", "P-value", "p", "P-Value", "p.value", "P-Val", "P.Value", "p.val", "P.Val") # Possible names for p-value
+rsid_names <- c("snp", "rsid", "SNP", "RSID", "snps","rs_id_dbSNP151_GRCh38p7") # Possible names for rsid
+beta_names <- c("beta", "BETA", "slope", "Beta") # Possible names for beta
+se_names <- c("se", "SE", "slope_se", "sebeta", "se_beta", "beta_se", "standard_error") # Possible names for se
+maf_names <- c("MAF", "af_alt", "maf", "ALT_AF", "alt_af", "AF_ALT") # Possible names for minor allel frequency
+pos_names <- c("POS", "position", "Position", "POSITION", "variant_pos") # Possible names for position
+chr_names <- c("chr", "CHR", "#chrom") # Possible names for chromosome
+gene_names <- c("gene_symbol", "gene_name", "gene_most_severe") # Possible names for gene
+```
+
+
+
+## Load GWAS Data and clean it up
+```{r load_GWAS, echo=FALSE}
+GWAS_raw <- fread(GWAS_path)
+
+colnames(GWAS_raw)
+```
+
+```{r clean_up_GWAS, echo=FALSE}
+options(warn = -1)
+
+GWAS <- GWAS_raw %>% # filtering GWAS data
+  {if(any(p_names %in% colnames(.))) rename_at(., vars(one_of(p_names)), ~"pval") else .} %>% 
+  {if(any(rsid_names %in% colnames(.))) rename_at(., vars(one_of(rsid_names)), ~"rsid") else .} %>% 
+  {if(any(beta_names %in% colnames(.))) rename_at(., vars(one_of(beta_names)), ~"beta") else .} %>% 
+  {if(any(se_names %in% colnames(.))) rename_at(., vars(one_of(se_names)), ~"se") else .} %>%
+  {if(any(maf_names %in% colnames(.))) rename_at(., vars(one_of(maf_names)), ~"maf") else .} %>%
+  {if(any(pos_names %in% colnames(.))) rename_at(., vars(one_of(pos_names)), ~"pos") else .} %>%
+  {if(any(chr_names %in% colnames(.))) rename_at(., vars(one_of(chr_names)), ~"chrom") else .} %>%
+  {if(any(gene_names %in% colnames(.))) rename_at(., vars(one_of(gene_names)), ~"gene") else .} %>%
+  filter(pval <= GWAS_pval) %>% 
+  filter(rsid != ".") %>% 
+  filter(maf != 0) %>%
+  filter(maf != 1) %>%
+  group_by(rsid) %>% # In cases of duplicate RSIDs, retain only the entry with the lowest p-value
+   arrange(pval, .by_group = TRUE) %>%
+   slice(1) %>%
+  ungroup()
+
+colnames(GWAS)
+rm(GWAS_raw)
+```
+
+
+
+Load QTL Data
+```{r load_QTL_data, echo=FALSE}
+
+# Get all file names
+file_list <- list.files(path = QTL_path, pattern = "", full.names = TRUE, recursive = TRUE)
+
+# Filter out directories
+file_list <- file_list[!dir.exists(file_list)]
+
+# Read all files and store them in a list
+all_QTL_raw <- lapply(file_list, function(file) {
+  dt <- fread(file)
+  # Add a column to indicate the source file/study
+  dt[, source := basename(dirname(file))]
+  return(dt)
+})
+
+# Name the list elements with the file names (without extension)
+names(all_QTL_raw) <- sapply(file_list, function(file) {
+  tools::file_path_sans_ext(basename(file))
+})
+
+
+gc()
+```
+
+# Clean up QTL data
+```{r clean_QTL_data, echo=FALSE echo=FALSE}
+options(warn = -1)
+
+all_QTL <- all_QTL_raw
+
+for (sample in names(all_QTL)) {   # Filter QTL data
+    all_QTL[[sample]] <- all_QTL[[sample]] %>% 
+      {if(any(p_names %in% colnames(.))) rename_at(., vars(one_of(p_names)), ~"pval") else .} %>% 
+      {if(any(rsid_names %in% colnames(.))) rename_at(., vars(one_of(rsid_names)), ~"rsid") else .} %>% 
+      {if(any(beta_names %in% colnames(.))) rename_at(., vars(one_of(beta_names)), ~"beta") else .} %>% 
+      {if(any(se_names %in% colnames(.))) rename_at(., vars(one_of(se_names)), ~"se") else .} %>%
+      {if(any(maf_names %in% colnames(.))) rename_at(., vars(one_of(maf_names)), ~"maf") else .} %>%
+      {if(any(pos_names %in% colnames(.))) rename_at(., vars(one_of(pos_names)), ~"pos") else .} %>%
+      {if(any(chr_names %in% colnames(.))) rename_at(., vars(one_of(chr_names)), ~"chrom") else .} %>%
+      {if(any(gene_names %in% colnames(.))) rename_at(., vars(one_of(gene_names)), ~"gene") else .} %>%
+      {if("significant_by_2step_FDR" %in% colnames(.)) filter(., significant_by_2step_FDR == "Yes") else .} %>%  
+      filter(pval <= 0.05) %>% 
+      filter(rsid != ".") %>% 
+      filter(maf != 0) %>%
+      filter(maf != 1) %>%
+      group_by(rsid) %>%
+       arrange(pval, .by_group = TRUE) %>% # In cases of duplicate RSIDs, retain only the entry with the lowest p-value
+       slice(1) %>%
+      ungroup()
+}
+rm(all_QTL_raw)
+gc()
+```
+# Define function to run coloc
+```{r run_coloc, echo=FALSE}
+# Function to perform colocalization for a single tissue
+# Both datasets need to contain columns for beta, varbeta, snp, position and MAF
+# Sample size also needs to be provided
+
+run_coloc <- function(dataset1, # e.g. GWAS data
+                          dataset2, # e.g. QTL data
+                          sample_type, # Name of tissue or cell type of QTL
+                          sample_size1, # Sample size of dataset1
+                          sample_size2 # Sample size of dataset2
+                          ) {
+  # Prepare GWAS dataset for coloc
+  dataset1 <- list(
+    beta = dataset1$beta,
+    varbeta = dataset1$se^2,
+    snp = dataset1$rsid,
+    type = "quant",
+    N = sample_size1,
+    MAF = dataset1$maf
+  )
+  
+  # Prepare eQTL dataset for coloc
+  dataset2 <- list(
+    beta = dataset2$beta,
+    varbeta = dataset2$se^2,
+    snp = dataset2$rsid,
+    type = "quant",
+    N = sample_size2,
+    MAF = dataset2$maf
+  )
+  
+  # Perform colocalization
+  result <- coloc.abf(dataset1 = dataset1,dataset2 = dataset2)
+  
+  return(result)
+}
+```
+
+```{r sample_sizes, echo=FALSE}
+# Named vector of sample sizes per sample
+sample_sizes <- c(
+  Adipose_Subcutaneous = 581,
+  Adipose_Visceral_Omentum = 469,
+  Adrenal_Gland = 233,
+  Artery_Aorta = 387,
+  Artery_Coronary = 213,
+  Artery_Tibial = 584,
+  Brain_Amygdala = 129,
+  Brain_Anterior_cingulate_cortex_BA24 = 147,
+  Brain_Caudate_basal_ganglia = 194,
+  Brain_Cerebellar_Hemisphere = 175,
+  Brain_Cerebellum = 209,
+  Brain_Cortex = 205,
+  Brain_Frontal_Cortex_BA9 = 175,
+  Brain_Hippocampus = 165,
+  Brain_Hypothalamus = 170,
+  Brain_Nucleus_accumbens_basal_ganglia = 202,
+  Brain_Putamen_basal_ganglia = 170,
+  `Brain_Spinal_cord_cervical_c-1` = 126,
+  Brain_Substantia_nigra = 114,
+  Breast_Mammary_Tissue = 396,
+  `Cells_EBV-transformed_lymphocytes` = 147,
+  Cells_Cultured_fibroblasts = 483,
+  Colon_Sigmoid = 318,
+  Colon_Transverse = 368,
+  Esophagus_Gastroesophageal_Junction = 330,
+  Esophagus_Mucosa = 497,
+  Esophagus_Muscularis = 465,
+  Heart_Atrial_Appendage = 372,
+  Heart_Left_Ventricle = 386,
+  Kidney_Cortex = 73,
+  Liver = 208,
+  Lung = 515,
+  Minor_Salivary_Gland = 144,
+  Muscle_Skeletal = 706,
+  Nerve_Tibial = 532,
+  Ovary = 167,
+  Pancreas = 305,
+  Pituitary = 237,
+  Prostate = 221,
+  Skin_Not_Sun_Exposed_Suprapubic = 517,
+  Skin_Sun_Exposed_Lower_leg = 605,
+  Small_Intestine_Terminal_Ileum = 174,
+  Spleen = 227,
+  Stomach = 324,
+  Testis = 322,
+  Thyroid = 574,
+  Uterus = 129,
+  Vagina = 141,
+  Whole_Blood = 670,
+  Astrocytes = 454,
+  Excitatory = 454,
+  Inhibitory = 454,
+  Microglia = 454,
+  Oligodendrocytes = 454,
+  OPC = 454
+)
+
+GWAS_sample_size <- 500737
+```
+
+
+# Create an empty data frame to store hyprcoloc results
+```{r create_dataframe_hyprcoloc, echo=FALSE}
+hyprcoloc_results_df <- data.frame(   # Prepare results data frame for hyprcoloc
+                          QTL = character(),
+                          sample = character(),
+                          number_common_snps = numeric(),
+                          posterior_prob = numeric(),
+                          regional_prob = numeric(),
+                          candidate_snp = character(),
+                          posterior_explained_by_snp = numeric(),
+                          candidate_gene = character(),
+                          stringsAsFactors = FALSE
+)
+```
+
+# Create an empty data frame to store COLOC results
+```{r create_dataframe_coloc, echo=FALSE}
+coloc_results_df <- data.frame(   # Prepare results data frame for coloc
+                         QTL = character(),
+                         sample = character(),
+                         number_common_snps = numeric(),
+                         PP.H0 = numeric(),
+                         PP.H1 = numeric(),
+                         PP.H2 = numeric(),
+                         PP.H3 = numeric(),
+                         PP.H4 = numeric(),
+                         candidate_snp = character(),
+                         PPH4.SNP = numeric(),
+                         candidate_gene = character(),
+                         stringsAsFactors = FALSE)
+```
+
+
+# Run coloc
+```{r run_coloc, echo=TRUE}
+options(warn = -1)
+
+un_all_QTL <- rbindlist(all_QTL, fill = TRUE, use.names = TRUE, idcol = "trait") %>% 
+              unique(by = "rsid")
+
+
+for (sample in names(all_QTL)) {   # Iterate through all QTLs
+  current_sample <- all_QTL[[sample]]  # Save in current_sample to run analysis
+  common_snps <- intersect(GWAS$rsid, current_sample$rsid)  # Identify common SNPs between GWAS and QTL data
+  GWAS_common <- GWAS[GWAS$rsid %in% common_snps, ]
+  current_sample_common <- current_sample[current_sample$rsid %in% common_snps, ]
+  current_sample_size <- sample_sizes[gsub("\\..*$", "", basename(sample))]
+  
+  traits <- c("GWAS", sample)  # Create a vector of trait names
+  snp_id <- cbind(GWAS_common$rsid, current_sample_common$rsid)
+  betas <- cbind(GWAS_common$beta, current_sample_common$beta)
+  ses <- cbind(GWAS_common$se, current_sample_common$se)
+  
+  print(current_sample$source[1])
+  print(gsub("\\..*$", "", basename(sample)))
+
+  
+  if (length(common_snps) > 1) {
+  print(paste("Common SNPs:",(length(common_snps))))
+  hyprcoloc_results <- hyprcoloc(betas, ses, trait.names = traits, snp.id = snp_id) # Run hyprcoloc
+ 
+  # Add results to the hyprcoloc results data frame
+  hyprcoloc_results_df <- rbind(hyprcoloc_results_df, data.frame(
+        QTL = current_sample$source[1],
+        sample = gsub("\\..*$", "", basename(sample)),
+        number_common_snps = length(common_snps),
+        posterior_prob = hyprcoloc_results[["results"]][["posterior_prob"]],
+        regional_prob = hyprcoloc_results[["results"]][["regional_prob"]],
+        candidate_snp = hyprcoloc_results[["results"]][["candidate_snp"]],
+        posterior_explained_by_snp = hyprcoloc_results[["results"]][["posterior_explained_by_snp"]],
+        candidate_gene = if(!is.na(hyprcoloc_results[["results"]][["candidate_snp"]])) {
+          current_sample %>% filter(rsid == hyprcoloc_results[["results"]][["candidate_snp"]]) %>% pull(gene)} else {NA_character_}
+        ))  
+  
+  best_snp_hyprcoloc <- hyprcoloc_results[["results"]][["candidate_snp"]]
+  
+    } else {
+      print("1 or less common rsid values found between GWAS and QTL datasets.")
+      
+      
+       # Add results to the hypr hyprcoloc results data frame
+      hyprcoloc_results_df <- rbind(hyprcoloc_results_df, data.frame(
+        QTL = current_sample$source[1],
+        sample = gsub("\\..*$", "", basename(sample)),
+        number_common_snps = length(common_snps),
+        posterior_prob = NA_character_,
+        regional_prob = NA_character_,
+        candidate_snp = NA_character_,
+        posterior_explained_by_snp = NA_character_,
+        candidate_gene = NA_character_
+        ))
+    }
+  
+  
+  
+    
+  if(length(common_snps) > 0) {
+    coloc_result <- run_coloc(GWAS,   # Run coloc
+                                current_sample,
+                                file_path_sans_ext(current_sample),
+                                GWAS_sample_size,
+                                current_sample_size)
+    
+    
+    
+    df_signficant_snps <- data.frame(rsid = coloc_result[["results"]][["snp"]],
+                                    SNP.PP.H4 = coloc_result[["results"]][["SNP.PP.H4"]]) %>%
+                                    left_join(current_sample %>% select(rsid, gene), by = "rsid") %>%
+                                    left_join(GWAS %>% select(rsid, chrom), by = "rsid")
+                                      
+    
+    # Add results to the coloc results data frame
+    coloc_results_df <- rbind(coloc_results_df, data.frame(
+     QTL = current_sample$source[1],
+     sample = gsub("\\..*$", "", basename(sample)),
+     number_common_snps = length(common_snps),
+     PP.H0 = format(coloc_result[["summary"]][["PP.H0.abf"]],scientific = TRUE, digits = 4),                                                                 
+     PP.H1 = format(coloc_result[["summary"]][["PP.H1.abf"]],scientific = TRUE, digits = 4),                                                                 
+     PP.H2 = format(coloc_result[["summary"]][["PP.H2.abf"]],scientific = TRUE, digits = 4),                                                                 
+     PP.H3 = format(coloc_result[["summary"]][["PP.H3.abf"]],scientific = TRUE, digits = 4),                                                                 
+     PP.H4 = format(coloc_result[["summary"]][["PP.H4.abf"]],scientific = TRUE, digits = 4),
+     candidate_snp = df_signficant_snps %>% filter(SNP.PP.H4 >= 0.8) %>% slice_max(SNP.PP.H4, n = 1) %>% pull(rsid) %>% paste(collapse = ", "),
+     PPH4.SNP = df_signficant_snps %>% filter(SNP.PP.H4 >= 0.8) %>% slice_max(SNP.PP.H4, n = 1) %>% pull(SNP.PP.H4) %>% 
+                                       format(scientific = TRUE, digits = 4) %>% 
+                                       paste(collapse = ", "),
+     candidate_gene = df_signficant_snps %>% filter(SNP.PP.H4 >= 0.8) %>% slice_max(SNP.PP.H4, n = 1) %>% pull(gene) %>% paste(collapse = ", ")))
+    
+    candidate_snp_coloc <- df_signficant_snps %>% filter(SNP.PP.H4 >= 0.8) %>% slice_max(SNP.PP.H4, n = 1) %>% pull(rsid)
+    candidate_gene_coloc <-  df_signficant_snps %>% filter(SNP.PP.H4 >= 0.8) %>% slice_max(SNP.PP.H4, n = 1) %>% pull(gene)
+    candidate_chr_coloc <-  df_signficant_snps %>% filter(SNP.PP.H4 >= 0.8) %>% slice_max(SNP.PP.H4, n = 1) %>% pull(chrom)
+    
+    
+    
+  }else{
+  # Add results to the coloc results data frame
+   coloc_results_df <- rbind(coloc_results_df, data.frame(
+     QTL = current_sample$source[1],
+     sample = gsub("\\..*$", "", basename(sample)),
+     number_common_snps = length(common_snps),
+     PP.H0 = NA_character_,                                                                 
+     PP.H1 = NA_character_,                                                                 
+     PP.H2 = NA_character_,                                                                 
+     PP.H3 = NA_character_,                                                                 
+     PP.H4 = NA_character_,
+     candidate_snp = NA_character_,
+     PPH4.SNP = NA_character_,
+     candidate_gene = NA_character_))
+  }
+} 
+
+
+coloc_results_df <- coloc_results_df %>%
+  mutate(across(where(is.character), ~ na_if(trimws(.), "")))
+
+# Write results to CSV file
+write.csv(hyprcoloc_results_df, paste0(GWAS_name, "_hyprcoloc_results.csv"), row.names = FALSE)
+write.csv(coloc_results_df, paste0(GWAS_name, "_coloc_results.csv"), row.names = FALSE)
+
+
+
+```
+
+# Heatmap of HFRS_with_dememtia and HFRS_wo_dementia
+
+```{r}
+HFRS_with <- fread("For Paper/HFRS_with_dementia_coloc_results.csv")
+HFRS_wo <- fread("For Paper/HFRS_wo_dementia_coloc_results.csv")
+
+
+# Filter HFRS_with
+HFRS_with_filtered <- HFRS_with[!is.na(candidate_gene) & PP.H4 > 0.8] %>% 
+                      filter(QTL != "ROSMAP")
+
+# Filter HFRS_wo
+HFRS_wo_filtered <- HFRS_wo[!is.na(candidate_gene) & PP.H4 > 0.8] %>% 
+                    filter(QTL != "ROSMAP")
+
+# Create HFRS_common
+HFRS_common <- merge(HFRS_with_filtered[, .(candidate_gene, sample,candidate_snp , QTL)], HFRS_wo_filtered[, .(candidate_gene, sample,candidate_snp , QTL)], 
+                     by = c("candidate_gene", "sample"), 
+                     suffixes = c("_with", "_wo"))
+
+length(unique(HFRS_with_filtered$sample))
+number_with <- HFRS_with_filtered %>% 
+  group_by(QTL) %>%
+  summarise(unique_snps = n_distinct(candidate_gene))
+print(number_with)
+
+
+length(unique(HFRS_wo_filtered$sample))
+
+
+number_wo <- HFRS_wo_filtered %>% 
+  group_by(QTL) %>%
+  summarise(unique_snps = n_distinct(candidate_gene))
+print(number_wo)
+```
+
+# Stuff to get heatmap for HyPrCOLOC
+```{r}
+HFRS_with <- fread("HFRS_with_dementia_hyprcoloc_results.csv")
+HFRS_wo <- fread("HFRS_wo_dementia_hyprcoloc_results.csv")
+
+# Filter HFRS_with
+HFRS_with_filtered <- HFRS_with[!is.na(candidate_gene) & posterior_explained_by_snp > 0.8] %>% 
+                      filter(QTL != "ROSMAP")
+
+# Filter HFRS_wo
+HFRS_wo_filtered <- HFRS_wo[!is.na(candidate_gene) & posterior_explained_by_snp > 0.8] %>% 
+                    filter(QTL != "ROSMAP")
+
+# Create HFRS_common
+HFRS_common <- merge(HFRS_with_filtered[, .(candidate_gene, sample,candidate_snp , QTL)], HFRS_wo_filtered[, .(candidate_gene, sample,candidate_snp , QTL)], 
+                     by = c("candidate_gene", "sample"), 
+                     suffixes = c("_with", "_wo"))
+length(unique(HFRS_with_filtered$sample))
+number_with <- HFRS_with_filtered %>% 
+  group_by(QTL) %>%
+  summarise(unique_snps = n_distinct(candidate_gene))
+print(number_with)
+
+
+length(unique(HFRS_wo_filtered$sample))
+
+
+number_wo <- HFRS_wo_filtered %>% 
+  group_by(QTL) %>%
+  summarise(unique_snps = n_distinct(candidate_gene))
+print(number_wo)
+
+```
+
+```{r}
+
+create_heatmap <- function(data, title, width = 10, height = 5) {
+  # Pre-process data to identify overlapping data points
+  data <- data %>%
+    group_by(candidate_gene, sample) %>%
+    mutate(overlap = n() > 1,
+           QTL = ifelse(overlap, "eQTL & sQTL", as.character(QTL))) %>%
+    ungroup()
+
+  # Get unique values and their counts
+  unique_genes <- unique(data$candidate_gene)
+  unique_samples <- unique(data$sample)
+  n_genes <- length(unique_genes)
+  n_samples <- length(unique_samples)
+
+  plot <- ggplot(data, aes(x = candidate_gene, y = sample, fill = QTL)) +
+    geom_tile(color = "white") +
+    geom_text(aes(label = ifelse(in_HFRS_common, "*", "")), 
+              color = "black", size = 6, vjust = 0.75) +
+    scale_fill_manual(values = c("eQTL" = "#40e0d0",
+                                 "sQTL" = "#ff9999",
+                                 "eQTL & sQTL" = "#cc99ff"),
+                      name = "QTL Type",
+                      breaks = c("eQTL", "sQTL", "eQTL & sQTL")) +
+    scale_x_discrete(limits = sort(unique_genes), expand = c(0, 0)) +
+    scale_y_discrete(limits = rev(sort(unique_samples)), expand = c(0, 0)) +
+    geom_hline(yintercept = seq(0.5, n_samples + 0.5, 1), 
+               color = "white", size = 0.5) +
+    geom_vline(xintercept = seq(0.5, n_genes + 0.5, 1), 
+               color = "white", size = 0.5) +
+    theme_minimal() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, face = "italic", size = 9.25),
+          axis.text.y = element_text(size = 9.9),
+          axis.title.x = element_text(size = 14, face = "bold"),
+          panel.grid = element_blank(),
+          panel.background = element_rect(fill = "#f3f3f4", color = NA),
+          panel.border = element_rect(color = "black", fill = NA, size = 0.5),
+          plot.background = element_rect(fill = "white", color = NA),
+          legend.position = "bottom",
+          axis.title.y = element_blank(),
+          plot.margin = margin(t = 20, r = 20, b = 20, l = 20, unit = "pt"),
+          plot.caption = element_text(hjust = 0.5, size = 10),
+          plot.title = element_text(hjust = 0.5, size = 17, face = "bold")) +
+    labs(title = paste0(title, " (PP.H4 > 0.8)"),
+         x = "Candidate Gene",
+         caption = "* Indicates presence in both HFRS GWAS") +
+    guides(fill = guide_legend(title = "QTL Type"),
+           text = guide_legend(title = "Both GWAS", 
+                               override.aes = list(fill = NA, label = "*")))
+  
+  # Return the plot with specified dimensions
+  return(plot + theme(aspect.ratio = height / width))
+}
+
+
+
+# Process and plot HFRS_with_filtered
+HFRS_with_filtered_pl <- HFRS_with_filtered %>%
+  mutate(QTL = case_when(
+    QTL == "GTEx_Analysis_v8_eQTL" ~ "eQTL",
+    QTL == "GTEx_Analysis_v8_sQTL" ~ "sQTL",
+    TRUE ~ NA_character_  # Set to NA for any other values
+  )) %>%
+  mutate(in_HFRS_common = interaction(candidate_gene, sample) %in% 
+           interaction(HFRS_common$candidate_gene, HFRS_common$sample))
+
+plot_with_filtered <- create_heatmap(HFRS_with_filtered_pl, "HFRS with Dementia", width = 28, height = 36)
+
+# Process and plot HFRS_wo_filtered
+HFRS_wo_filtered_pl <- HFRS_wo_filtered %>%
+  mutate(QTL = case_when(
+    QTL == "GTEx_Analysis_v8_eQTL" ~ "eQTL",
+    QTL == "GTEx_Analysis_v8_sQTL" ~ "sQTL",
+    TRUE ~ NA_character_  # Set to NA for any other values
+  )) %>%
+  mutate(in_HFRS_common = interaction(candidate_gene, sample) %in% 
+           interaction(HFRS_common$candidate_gene, HFRS_common$sample))
+
+plot_wo_filtered <- create_heatmap(HFRS_wo_filtered_pl, "HFRS without Dementia", width = 43, height = 40)
+
+# Save plots 
+ggsave("HFRS_with_filtered_heatmap_hypr.jpg", plot_with_filtered, 
+       width = 12, height = 10, dpi = 300)
+ggsave("HFRS_wo_filtered_heatmap_hypr.jpg", plot_wo_filtered, 
+       width = 12, height = 10, dpi = 300)
+
+# Display plots
+print(plot_with_filtered)
+print(plot_wo_filtered)
+
+```
+
+# Run hyprcoloc for all GTEx data at once (not in paper)
+
+```{r}
+all_hyprcoloc_results_df <- data.frame(
+                          QTL = character(),
+                          HFRS = character(),
+                          sample = character(),
+                          number_common_snps = numeric(),
+                          posterior_prob = numeric(),
+                          regional_prob = numeric(),
+                          candidate_snp = character(),
+                          posterior_explained_by_snp = numeric(),
+                          candidate_gene = character(),
+                          stringsAsFactors = FALSE
+)
+
+# Filter each list in all_QTL to keep only rsids found in GWAS$rsid
+filtered_QTL <- lapply(all_QTL, function(qtl) {
+  qtl[qtl$rsid %in% GWAS$rsid, ]
+  qtl[, c("rsid", "beta")]
+})
+
+# Create a dataframe with rsid and beta columns for each list
+betas <- Reduce(function(x, y) merge(x, y, by = "rsid", all = TRUE), 
+                    lapply(seq_along(filtered_QTL), function(i) {
+                      df <- filtered_QTL[[i]]
+                      colnames(df)[colnames(df) == "beta"] <- paste0("T", i)
+                      df
+                    }))
+
+
+
+filtered_QTL <- lapply(all_QTL, function(qtl) {
+  qtl[qtl$rsid %in% GWAS$rsid, ]
+  qtl[, c("rsid", "se")]
+})
+
+
+ses <- Reduce(function(x, y) merge(x, y, by = "rsid", all = TRUE), 
+                    lapply(seq_along(filtered_QTL), function(i) {
+                      df <- filtered_QTL[[i]]
+                      colnames(df)[colnames(df) == "se"] <- paste0("T", i)
+                      df
+                    }))
+
+
+
+ common_snps <- intersect(GWAS$rsid, un_all_QTL$rsid)  # Identify common SNPs between GWAS and QTL data
+  GWAS_common <- GWAS[GWAS$rsid %in% common_snps, ]
+  current_sample_common <- un_all_QTL[un_all_QTL$rsid %in% common_snps, ]
+  
+  traits <- paste0("T", 1:50)  # Create a vector of trait names
+  snp_id <- betas$rsid
+  betas <- na.omit(betas) %>% select(-rsid)
+  betas <- as.matrix(betas)
+
+  ses <- na.omit(ses) %>% select(-rsid)
+  ses <- as.matrix(ses)
+
+
+
+all_hyprcoloc_results <- hyprcoloc(betas, ses, trait.names = traits, snp.id = snp_id) # Run hyprcoloc
+ 
+all_hyprcoloc_results_df <- rbind(all_hyprcoloc_results_df, data.frame(
+  QTL = un_all_QTL$source[1],
+  HFRS = GWAS_name,
+  sample = paste(unique(gsub("\\..*$", "", un_all_QTL %>% 
+                 filter(rsid %in% all_hyprcoloc_results[["results"]][["candidate_snp"]]) %>% 
+                 pull(trait))), collapse = ", "),
+  posterior_prob = paste(all_hyprcoloc_results[["results"]][["posterior_prob"]], collapse = ", "),
+  regional_prob = paste(all_hyprcoloc_results[["results"]][["regional_prob"]], collapse = ", "),
+  candidate_snp = paste(all_hyprcoloc_results[["results"]][["candidate_snp"]], collapse = ", "),
+  posterior_explained_by_snp = paste(all_hyprcoloc_results[["results"]][["posterior_explained_by_snp"]], collapse = ", "),
+  candidate_gene = paste(unique(un_all_QTL %>% 
+                        filter(rsid %in% all_hyprcoloc_results[["results"]][["candidate_snp"]]) %>% 
+                        pull(gene)), collapse = ", ")
+))
+
+write.csv(all_hyprcoloc_results_df, paste0(GWAS_name,"_hyprcoloc_", un_all_QTL$source[1], ".csv"), row.names = FALSE)
+
+```
+
