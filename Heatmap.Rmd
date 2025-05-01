@@ -6,7 +6,7 @@ output: html_document
 ---
 
 ## Load HFRS_with_dememtia and HFRS_wo_dementia for Heatmap
-```{r}
+```{r load_results, echo=FALSE}
 HFRS_with <- fread("HFRS_with_dementia_coloc_results.csv") # Path of HFRS with dementia defintion
 HFRS_wo <- fread("HFRS_wo_dementia_coloc_results.csv") # Path of HFRS without dementia definition
 
@@ -24,7 +24,7 @@ HFRS_common <- merge(HFRS_with_filtered[, .(candidate_gene, sample,candidate_snp
 ```
 
 ##  Define function for heatmap
-```{r}
+```{r heatmap_function, echo=FALSE}
 
 create_heatmap <- function(data, title, width = 10, height = 5) {
   # Pre-process data to identify overlapping data points
