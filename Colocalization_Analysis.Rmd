@@ -36,13 +36,12 @@ chr_names <- c("chr", "CHR", "#chrom") # Possible names for chromosome
 gene_names <- c("gene_symbol", "gene_name", "gene_most_severe") # Possible names for gene
 ```
 
-
-
 ## Load GWAS Data
 ```{r load_GWAS, echo=FALSE}
 GWAS_raw <- fread(GWAS_path)
 ```
 
+## Clean up GWAS data
 ```{r clean_up_GWAS, echo=FALSE}
 options(warn = -1)
 
@@ -70,7 +69,7 @@ rm(GWAS_raw)
 
 
 
-##Load QTL Data (Data for all tissues in QTL_path)
+## Load QTL Data (Data for all tissues in QTL_path)
 ```{r load_QTL_data, echo=FALSE}
 
 # Get all file names
