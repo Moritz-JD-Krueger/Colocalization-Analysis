@@ -1,7 +1,6 @@
 ---
 title: "Colocalization Analysis"
 author: "Moritz Krueger"
-date: "`r Sys.Date()`"
 output: html_document
 ---
 
