@@ -4,6 +4,16 @@ author: "Moritz Krueger"
 output: html_document
 ---
 
+## Libraries
+```{r libraries, echo=FALSE}
+library(tidyverse)
+library(data.table)
+library(coloc)
+library(tools)
+library(ggplot2)
+library(patchwork)
+```
+
 ## Load HFRS_with_dememtia and HFRS_wo_dementia for Heatmap
 ```{r load_results, echo=FALSE}
 HFRS_with <- fread("HFRS_with_dementia_coloc_results.csv") # Path of HFRS with dementia defintion
