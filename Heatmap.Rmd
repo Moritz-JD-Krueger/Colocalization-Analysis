@@ -1,5 +1,5 @@
 
-# Heatmap of HFRS_with_dememtia and HFRS_wo_dementia
+## Heatmap of HFRS_with_dememtia and HFRS_wo_dementia
 ```{r}
 HFRS_with <- fread("HFRS_with_dementia_coloc_results.csv") # Path of HFRS with dementia defintion
 HFRS_wo <- fread("HFRS_wo_dementia_coloc_results.csv") # Path of HFRS without dementia definition
@@ -17,7 +17,7 @@ HFRS_common <- merge(HFRS_with_filtered[, .(candidate_gene, sample,candidate_snp
                      suffixes = c("_with", "_wo"))
 ```
 
-#  Define function for heatmap
+##  Define function for heatmap
 ```{r}
 
 create_heatmap <- function(data, title, width = 10, height = 5) {
@@ -75,7 +75,7 @@ create_heatmap <- function(data, title, width = 10, height = 5) {
 
 
 
-# Process and plot results
+## Plot results
 HFRS_with_filtered_pl <- HFRS_with_filtered %>%
   mutate(QTL = case_when(
     QTL == "GTEx_Analysis_v8_eQTL" ~ "eQTL",
