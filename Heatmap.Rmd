@@ -8,7 +8,6 @@ output: html_document
 ```{r libraries, echo=FALSE}
 library(tidyverse)
 library(data.table)
-library(coloc)
 library(tools)
 library(ggplot2)
 library(patchwork)
