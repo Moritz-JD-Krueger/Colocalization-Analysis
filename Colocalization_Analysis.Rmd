@@ -245,10 +245,6 @@ coloc_results_df <- data.frame(   # Prepare results data frame for coloc
 ```{r run_coloc, echo=TRUE}
 options(warn = -1)
 
-un_all_QTL <- rbindlist(all_QTL, fill = TRUE, use.names = TRUE, idcol = "trait") %>% 
-              unique(by = "rsid")
-
-
 for (sample in names(all_QTL)) {   # Iterate through all QTLs
   current_sample <- all_QTL[[sample]]  # Save in current_sample to run analysis
   common_snps <- intersect(GWAS$rsid, current_sample$rsid)  # Identify common SNPs between GWAS and QTL data
