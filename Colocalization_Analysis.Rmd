@@ -163,8 +163,8 @@ run_coloc <- function(dataset1, # e.g. GWAS data
 }
 ```
 
-```{r sample_sizes, echo=FALSE}
 # Named vector of sample sizes per sample
+```{r sample_sizes, echo=FALSE}
 sample_sizes <- c(
   Adipose_Subcutaneous = 581,
   Adipose_Visceral_Omentum = 469,
