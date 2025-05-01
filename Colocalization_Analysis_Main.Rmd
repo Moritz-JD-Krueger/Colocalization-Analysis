@@ -131,6 +131,7 @@ for (sample in names(all_QTL)) {   # Filter QTL data
 rm(all_QTL_raw)
 gc()
 ```
+
 # Define function to run coloc
 ```{r run_coloc, echo=FALSE}
 # Function to perform colocalization for a single tissue
@@ -234,20 +235,7 @@ GWAS_sample_size <- 500737
 ```
 
 
-# Create an empty data frame to store hyprcoloc results
-```{r create_dataframe_hyprcoloc, echo=FALSE}
-hyprcoloc_results_df <- data.frame(   # Prepare results data frame for hyprcoloc
-                          QTL = character(),
-                          sample = character(),
-                          number_common_snps = numeric(),
-                          posterior_prob = numeric(),
-                          regional_prob = numeric(),
-                          candidate_snp = character(),
-                          posterior_explained_by_snp = numeric(),
-                          candidate_gene = character(),
-                          stringsAsFactors = FALSE
-)
-```
+
 
 # Create an empty data frame to store COLOC results
 ```{r create_dataframe_coloc, echo=FALSE}
@@ -267,7 +255,7 @@ coloc_results_df <- data.frame(   # Prepare results data frame for coloc
 ```
 
 
-# Run coloc
+# Run Coloc
 ```{r run_coloc, echo=TRUE}
 options(warn = -1)
 
