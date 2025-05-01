@@ -1,1 +1,1 @@
-Colocalization analysis between GWAS data of HFRS (with and without dementia definition) and GTEx v8 QTL data for all available tissues. 
+The code identifies shared causal variants between the FinnGen-based GWAS for the Hospital Frailty Risk Score and Tissue-Specific eQTLs and sQTLs from GTEx v8.
