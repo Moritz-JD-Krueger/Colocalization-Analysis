@@ -88,7 +88,6 @@ create_heatmap <- function(data, title, width = 10, height = 5) {
 }
 
 
-
 ## Plot results
 HFRS_with_filtered_pl <- HFRS_with_filtered %>%
   mutate(QTL = case_when(
